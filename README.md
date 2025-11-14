@@ -12,6 +12,10 @@ Then, install the project dependencies using npm:
 
 npm install
 
+Create a new file named .env.local in the root folder and add the following content:
+
+NEXT_PUBLIC_LIVEBLOCKS_PUBLIC_KEY=<*your_public_key*>
+
 Finally, to run the serve side:
 
 npm run dev
