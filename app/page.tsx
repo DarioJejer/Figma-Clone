@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { fabric } from "fabric";
+import ShapeSelector from "@/components/ShapeSelector/ShapeSelector";
 
 export default function Home() {
 
@@ -17,7 +18,7 @@ export default function Home() {
     });
 
     canvas.on("mouse:down", (options) => {
-      
+  
       // Check if an object was clicked
       if (options.target) {
         console.log("an object was clicked! ", options.target);
@@ -45,7 +46,8 @@ export default function Home() {
 
   return (
     <main className="flex flex-col h-screen ">
-      <h1 className="text-4xl font-bold h-1/6 flex justify-center items-center">Figma Clone</h1>
+      <h1 className="text-4xl font-bold h-16 flex justify-center items-center">Figma Clone</h1>
+      <ShapeSelector/>
       <div id="canvas-window" className="flex-1 relative bg-gray-100">
         <canvas ref={canvasRef} className="absolute inset-0 w-full h-full" />
       </div>
