@@ -1,13 +1,18 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { fabric } from "fabric";
 import ShapeSelector from "@/components/ShapeSelector/ShapeSelector";
+import { printShape } from "@/lib/canvas";
 
 export default function Home() {
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fabricRef = useRef<fabric.Canvas | null>(null);
+
+
+  // We're using refs here because we want to access these variables inside the event listeners
+  const selectedShape = useRef<string>("");
 
   useEffect(() => {
 
@@ -23,17 +28,11 @@ export default function Home() {
       if (options.target) {
         console.log("an object was clicked! ", options.target);
       }
-      // Implement logic to add selected shapes on canvas click
+      // If no object was clicked, add a new shape at the pointer location
       else {
         const pointer = canvas.getPointer(options.e);
-        const circle = new fabric.Circle({
-          left: pointer.x,
-          top: pointer.y,
-          radius: 20,
-          fill: "blue",
-        });
-        canvas.add(circle);
-      }
+        printShape(canvas, pointer, selectedShape.current);
+      }      
     });
 
     // set canvas reference to fabricRef so we can use it later anywhere outside canvas listener
@@ -47,7 +46,7 @@ export default function Home() {
   return (
     <main className="flex flex-col h-screen ">
       <h1 className="text-4xl font-bold h-16 flex justify-center items-center">Figma Clone</h1>
-      <ShapeSelector/>
+      <ShapeSelector canvasSelectedShape={selectedShape} />
       <div id="canvas-window" className="flex-1 relative bg-gray-100">
         <canvas ref={canvasRef} className="absolute inset-0 w-full h-full" />
       </div>

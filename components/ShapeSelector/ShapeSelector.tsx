@@ -4,9 +4,13 @@ import { shapeElements } from "@/lib/shapes"
 import { useState } from "react";
 import Image from "next/image";
 
-export default function ShapeSelector() {
+type Props = {
+  canvasSelectedShape: React.MutableRefObject<string>;
+};
 
-  const [selectedShape, setSelectedShape] = useState("rectangle");
+export default function ShapeSelector({ canvasSelectedShape }: Props) {
+  const [selectedShape, setSelectedShape] =  useState<string>("");
+
   return (
     <div 
       className="fixed left-1/2 -translate-x-1/2 bg-white shadow-xl rounded-xl p-3 flex space-x-4 z-50"
@@ -18,7 +22,10 @@ export default function ShapeSelector() {
         className={`
           p-2 rounded-lg 
           ` + (selectedShape === shape.value ? " bg-gray-200" : "hover:bg-gray-100")} 
-        onClick={() => setSelectedShape(shape.value)}
+        onClick={() => {
+          setSelectedShape(shape.value)
+          canvasSelectedShape.current = shape.value;
+        }}
       >
         <div className="relative w-6 h-6">
           <Image src={shape.icon} alt={shape.name} fill />

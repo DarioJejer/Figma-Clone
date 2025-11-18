@@ -7,7 +7,7 @@ export enum Shapes {
   Line     
 }
 
-export const shapeElements = [
+export const shapeElements : { icon: string; name: string; value: string }[] = [
   {
     icon: "/assets/rectangle.svg",
     name: "Rectangle",
