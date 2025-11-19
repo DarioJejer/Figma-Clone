@@ -21,7 +21,7 @@ export default function ShapeSelector({ canvasSelectedShape }: Props) {
         key={shape.value} 
         className={`
           p-2 rounded-lg 
-          ` + (selectedShape === shape.value ? " bg-gray-200" : "hover:bg-gray-100")} 
+          ` + (addSelectedStyles(shape))} 
         onClick={() => {
           setSelectedShape(shape.value)
           canvasSelectedShape.current = shape.value;
@@ -34,4 +34,8 @@ export default function ShapeSelector({ canvasSelectedShape }: Props) {
     ))}
     </div>
   )
+
+  function addSelectedStyles(shape: { icon: string; name: string; value: string; }) {
+    return selectedShape === shape.value ? " bg-gray-200" : "hover:bg-gray-100";
+  }
 }
