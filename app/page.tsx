@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { fabric } from "fabric";
 import ShapeSelector from "@/components/ShapeSelector/ShapeSelector";
 import { printShape } from "@/lib/canvas";
+import PresenceCursors from "@/components/CursorsPresence/CursorsPresence";
 
 export default function Home() {
 
@@ -13,9 +14,9 @@ export default function Home() {
 
   // We're using refs here because we want to access these variables inside the event listeners
   const selectedShape = useRef<string>("");
-
+  
   useEffect(() => {
-
+    
     const canvasElement = document.getElementById("canvas-window");
     const canvas = new fabric.Canvas(canvasRef.current, {
       width: canvasElement?.clientWidth,
@@ -49,6 +50,7 @@ export default function Home() {
       <ShapeSelector canvasSelectedShape={selectedShape} />
       <div id="canvas-window" className="flex-1 relative bg-gray-100">
         <canvas ref={canvasRef} className="absolute inset-0 w-full h-full" />
+        <PresenceCursors />
       </div>
     </main>
   );
