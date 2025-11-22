@@ -117,6 +117,14 @@ wss.on("connection", (ws) => {
       elements.push(element);
       broadcast(ws, { type: "element:created", element });
     }    
+    if (data.type === "element:modify") {
+      const payload = data.payload;
+      const index = elements.findIndex((el) => el.objectId === payload.objectId);
+      if (index !== -1) {
+        elements[index] = { ...elements[index], ...payload };
+        broadcast(ws, { type: "element:modified", element: elements[index] });
+      }
+    }
 
     if (data.type === "leave") {
       if (client) {

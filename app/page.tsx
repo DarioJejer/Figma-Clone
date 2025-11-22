@@ -33,7 +33,7 @@ export default function Home() {
           data.elements.forEach((element: any) => {
             fabric.util.enlivenObjects([element.props], function (enlivenedObjects: any) {
               enlivenedObjects.forEach(function (obj: any) {
-                obj.ObjectId = element.objectId; // restore objectId
+                obj.objectId = element.objectId; // restore objectId
                 canvas.add(obj);
               });
               canvas.renderAll();
@@ -44,11 +44,20 @@ export default function Home() {
           const element = data.element;
           fabric.util.enlivenObjects([element.props], function (enlivenedObjects: any) {
             enlivenedObjects.forEach(function (obj: any) {
-              obj.ObjectId = element.objectId; // restore objectId
+              obj.objectId = element.objectId; // restore objectId
               canvas.add(obj);
             });
             canvas.renderAll();
           });
+        }
+
+        if (data.type === "element:modified") {
+          const element = data.element;
+          const obj = canvas.getObjects().find((o: any) => o.objectId === element.objectId);
+          if (obj) {
+            obj.set(element.props);
+            canvas.renderAll();
+          }
         }
       } catch (err) {
         console.error("Failed to process ws message", err);
@@ -85,6 +94,27 @@ export default function Home() {
         }
       }
     });
+
+    canvas.on("object:modified", (options: any) => {
+      const element = options.target;
+      syncShapeToStorage(element);
+    });
+
+    canvas.on("object:scaling", (options: any) => {
+      const element = options.target;
+      syncShapeToStorage(element);
+    });
+
+    canvas.on("object:moving", (options: any) => {
+      const element = options.target;
+      syncShapeToStorage(element);
+    });
+
+    const syncShapeToStorage = (element: fabric.Object) => {
+      const elementId = element.objectId;
+      const payload = { type: element.type, objectId: elementId, props: element.toObject() };
+      ws.send(JSON.stringify({ type: "element:modify", payload: payload }));
+    };
 
     // cleanup on unmount
     const cleanupWs = () => {
