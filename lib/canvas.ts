@@ -4,47 +4,50 @@ import { fabric } from "fabric";
 export const printShape = (canvas: fabric.Canvas, pointer: any, selectedShape: string) => {
   switch (selectedShape) {
     case "circle":
-      addCircle(canvas, pointer, selectedShape);
-      break;
+      return addCircle(canvas, pointer);
     case "rectangle":
-      addRectangle(canvas, pointer, selectedShape);
-      break;
+      return addRectangle(canvas, pointer);
     case "triangle":
-      addTriangle(canvas, pointer, selectedShape);
-      break;
+      return addTriangle(canvas, pointer);
     default:
-      break;
+      return null;
   }
 }
 
-function addCircle(canvas: fabric.Canvas, pointer: any, selectedShape: string) {
+function addCircle(canvas: fabric.Canvas, pointer: any) {
   const circle = new fabric.Circle({
     left: pointer.x,
     top: pointer.y,
     radius: 20,
     fill: "blue",
+    objectId: crypto.randomUUID(),
   });
   canvas.add(circle);
+  return circle;
 }
 
-function addRectangle(canvas: fabric.Canvas, pointer: any, selectedShape: string) {
+function addRectangle(canvas: fabric.Canvas, pointer: any) {
   const rectangle = new fabric.Rect({
     left: pointer.x,
     top: pointer.y,
     width: 40,
     height: 30,
     fill: "red",
+    objectId: crypto.randomUUID(),
   });
   canvas.add(rectangle);
+  return rectangle;
 }
 
-function addTriangle(canvas: fabric.Canvas, pointer: any, selectedShape: string) {
+function addTriangle(canvas: fabric.Canvas, pointer: any) {
   const triangle = new fabric.Triangle({
     left: pointer.x,
     top: pointer.y,
     width: 40,
     height: 40,
     fill: "green",
+    objectId: crypto.randomUUID(),
   });
   canvas.add(triangle);
+  return triangle;
 }

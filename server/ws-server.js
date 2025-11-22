@@ -1,4 +1,5 @@
 const WebSocket = require("ws");
+const { randomUUID } = require("crypto");
 
 const PORT = process.env.WS_PORT ? Number(process.env.WS_PORT) : 8080;
 
@@ -6,6 +7,9 @@ const wss = new WebSocket.Server({ port: PORT });
 
 // Keep a map of clients and their latest presence
 const clients = new Map();
+
+// In-memory storage for canvas elements (will persist while server runs)
+const elements = [];
 
 function broadcast(sender, payload) {
   const msg = JSON.stringify(payload);
@@ -65,7 +69,15 @@ function generateRandomColor() {
 
 wss.on("connection", (ws) => {
 
-  clients.set(ws, { id: crypto.randomUUID(), name: generateRandomName(), color: generateRandomColor(), presence: null });
+  const clientId = randomUUID();
+  const name = generateRandomName();
+  const color = generateRandomColor();
+  clients.set(ws, { id: clientId, name, color, presence: null });
+
+  // send current elements to the newly connected client
+  try {
+    ws.send(JSON.stringify({ type: "init", elements }));
+  } catch (err) {}
 
   ws.on("message", (raw) => {
     let data;
@@ -79,21 +91,29 @@ wss.on("connection", (ws) => {
     if (!client) return;
 
     if (data.type === "join") {
-      if (data.name && data.color){
-        clients.set(ws, { name: data.name, color: data.color });        
-      }
+      // accept client's supplied name/color (optional)
+      const updated = { ...client, name: data.name ?? client.name, color: data.color ?? client.color };
+      clients.set(ws, updated);
       // inform others about the new user (with null presence)
-      broadcast(ws, { type: "user:joined", id: data.id, name: data.name, color: data.color });
+      broadcast(ws, { type: "user:joined", id: updated.id, name: updated.name, color: updated.color });
     }
 
     if (data.type === "presence") {
-      if (!data.cursor)
-        return;
+      // presence updates can be null (hidden) or an object
       client.presence = data.cursor;
       clients.set(ws, client);
       // broadcast presence to others
       broadcast(ws, { type: "presence", id: client.id, cursor: data.cursor, name: client.name, color: client.color });
     }
+
+    // Store canvas element creations
+    if (data.type === "element:create" || data.type === "shape:create") {
+      const payload = data.payload;
+      if (!payload) return;
+      const element = { createdAt: Date.now(), ...payload };
+      elements.push(element);
+      broadcast(ws, { type: "element:created", element });
+    }    
 
     if (data.type === "leave") {
       if (client) {

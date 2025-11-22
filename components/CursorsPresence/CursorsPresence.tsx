@@ -1,3 +1,4 @@
+"use client";
 
 import React, { useEffect, useRef, useState } from "react";
 
@@ -9,30 +10,28 @@ type RemoteCursor = {
   name?: string;
 };
 
-export default function PresenceCursors() {
+type Props = {
+  ws: WebSocket | null;
+};
+
+export default function PresenceCursors({ ws }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const wsRef = useRef<WebSocket | null>(null);
   const tickingRef = useRef(false);
 
   const [remoteCursors, setRemoteCursors] = useState<Record<string, RemoteCursor>>({});
 
   useEffect(() => {
+
     const container = document.getElementById("canvas-window");
     if (!container) return;
     containerRef.current = container as HTMLDivElement;
 
-    // connect to WS server
-    const ws = new WebSocket(process.env.NEXT_PUBLIC_WS_URL ?? "ws://localhost:8080");
-    wsRef.current = ws;
+    if (!ws) return;
 
-    ws.addEventListener("open", () => {
-      ws.send(JSON.stringify({ type: "join"}));
-    });
-
-    ws.addEventListener("message", (ev) => {
+    const onMessage = (ev: MessageEvent) => {
       try {
         const data = JSON.parse(ev.data as string);
-        if (data.type === "presence") {
+        if (data.type === "presence" && data.cursor) {
           setRemoteCursors((prev) => ({
             ...prev,
             [data.id]: { id: data.id, x: data.cursor.x, y: data.cursor.y, color: data.color, name: data.name },
@@ -48,7 +47,8 @@ export default function PresenceCursors() {
       } catch (err) {
         // ignore
       }
-    });
+    };
+    ws.addEventListener("message", onMessage);
 
     // pointer tracking
     const onPointerMove = (e: PointerEvent) => {
@@ -61,36 +61,30 @@ export default function PresenceCursors() {
       if (!tickingRef.current) {
         tickingRef.current = true;
         requestAnimationFrame(() => {
-          if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-            wsRef.current.send(JSON.stringify({ type: "presence", cursor: { x: nx, y: ny } }));
+          if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: "presence", cursor: { x: nx, y: ny } }));
           }
           tickingRef.current = false;
         });
       }
     };
-
+    container.addEventListener("pointermove", onPointerMove);
+    
     const onLeave = () => {
-      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-        wsRef.current.send(JSON.stringify({ type: "leave" }));
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: "leave"}));
       }
     };
-
-    container.addEventListener("pointermove", onPointerMove);
     container.addEventListener("pointerleave", onLeave);
 
+
     return () => {
+      ws.removeEventListener("message", onMessage);
       container.removeEventListener("pointermove", onPointerMove);
       container.removeEventListener("pointerleave", onLeave);
-      if (wsRef.current) {
-        try {
-          wsRef.current.send(JSON.stringify({ type: "leave" }));
-        } catch (e) {}
-        wsRef.current.close();
-      }
     };
-  }, []);
+  }, [ws]);
 
-  // render remote cursors
   return (
     <div className="pointer-events-none absolute inset-0">
       {Object.values(remoteCursors).map((cursor) => {
