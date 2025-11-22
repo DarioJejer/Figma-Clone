@@ -13,12 +13,13 @@ export default function Home() {
   // We're using refs here because we want to access these variables inside the event listeners
   const selectedShape = useRef<string>("");
   const wsRef = useRef<WebSocket | null>(null);
+  const [ws, setWs] = useState<WebSocket | null>(null);
 
   useEffect(() => {
     // create websocket connection for presence + element sync
     const ws = new WebSocket(process.env.NEXT_PUBLIC_WS_URL ?? "ws://localhost:8080");
     wsRef.current = ws;
-
+    setWs(ws);
     const onOpen = () => {
       try {
         ws.send(JSON.stringify({ type: "join" }));
@@ -54,8 +55,11 @@ export default function Home() {
         if (data.type === "element:modified") {
           const element = data.element;
           const obj = canvas.getObjects().find((o: any) => o.objectId === element.objectId);
-          if (obj) {
-            obj.set(element.props);
+          if (obj) {            
+            obj.set(element.props);            
+            obj.selectable = true;
+            obj.evented = true;
+            obj.setCoords();
             canvas.renderAll();
           }
         }
@@ -85,9 +89,10 @@ export default function Home() {
 
         // publish created element to WS server
         try {
-          if (ws && ws.readyState === WebSocket.OPEN && created) {
+          const socketNow = wsRef.current;
+          if (socketNow && socketNow.readyState === WebSocket.OPEN && created) {
             const payload = { type: created.type, objectId: created.objectId, props: created.toObject() };
-            ws.send(JSON.stringify({ type: "element:create", payload: payload }));
+            socketNow.send(JSON.stringify({ type: "element:create", payload: payload }));
           }
         } catch (e) {
           console.error("Failed to send element:create message", e);
@@ -113,17 +118,23 @@ export default function Home() {
     const syncShapeToStorage = (element: fabric.Object) => {
       const elementId = element.objectId;
       const payload = { type: element.type, objectId: elementId, props: element.toObject() };
-      ws.send(JSON.stringify({ type: "element:modify", payload: payload }));
+      const socketNow = wsRef.current;
+      if (socketNow && socketNow.readyState === WebSocket.OPEN) {
+        socketNow.send(JSON.stringify({ type: "element:modify", payload: payload }));
+      }
     };
 
     // cleanup on unmount
     const cleanupWs = () => {
+      const socketNow = wsRef.current;
       try {
-        ws.send(JSON.stringify({ type: "leave" }));
+        socketNow?.send(JSON.stringify({ type: "leave" }));
       } catch (e) { }
       try {
-        ws.close();
+        socketNow?.close();
       } catch (e) { }
+      setWs(null);
+      wsRef.current = null;
     };
 
     return () => {
@@ -138,7 +149,7 @@ export default function Home() {
       <ShapeSelector canvasSelectedShape={selectedShape} />
       <div id="canvas-window" className="flex-1 relative bg-gray-100">
         <canvas ref={canvasRef} className="absolute inset-0 w-full h-full" />
-        <PresenceCursors ws={wsRef.current} />
+        <PresenceCursors ws={ws} />
       </div>
     </main>
   );
