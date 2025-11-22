@@ -13,28 +13,50 @@ export default function Home() {
   // We're using refs here because we want to access these variables inside the event listeners
   const selectedShape = useRef<string>("");
   const wsRef = useRef<WebSocket | null>(null);
-  
+
   useEffect(() => {
     // create websocket connection for presence + element sync
     const ws = new WebSocket(process.env.NEXT_PUBLIC_WS_URL ?? "ws://localhost:8080");
+    wsRef.current = ws;
+
     const onOpen = () => {
       try {
         ws.send(JSON.stringify({ type: "join" }));
-      } catch (e) {}
+      } catch (e) { }
     };
     ws.addEventListener("open", onOpen);
-    wsRef.current = ws;
-    
-    // cleanup on unmount
-    const cleanupWs = () => {
+
+    const onMessage = (ev: MessageEvent) => {
       try {
-        ws.send(JSON.stringify({ type: "leave" }));
-      } catch (e) {}
-      try {
-        ws.close();
-      } catch (e) {}
+        const data = JSON.parse(ev.data as string);
+        if (data.type === "elements:init") {
+          data.elements.forEach((element: any) => {
+            fabric.util.enlivenObjects([element.props], function (enlivenedObjects: any) {
+              enlivenedObjects.forEach(function (obj: any) {
+                obj.ObjectId = element.objectId; // restore objectId
+                canvas.add(obj);
+              });
+              canvas.renderAll();
+            });
+          });
+        }
+        if (data.type === "element:created") {
+          const element = data.element;
+          fabric.util.enlivenObjects([element.props], function (enlivenedObjects: any) {
+            enlivenedObjects.forEach(function (obj: any) {
+              obj.ObjectId = element.objectId; // restore objectId
+              canvas.add(obj);
+            });
+            canvas.renderAll();
+          });
+        }
+      } catch (err) {
+        console.error("Failed to process ws message", err);
+      }
     };
-    
+    ws.addEventListener("message", onMessage);
+
+
     const canvasElement = document.getElementById("canvas-window");
     const canvas = new fabric.Canvas(canvasRef.current, {
       width: canvasElement?.clientWidth,
@@ -59,11 +81,21 @@ export default function Home() {
             ws.send(JSON.stringify({ type: "element:create", payload: payload }));
           }
         } catch (e) {
-          // ignore publish failures
+          console.error("Failed to send element:create message", e);
         }
       }
     });
-    
+
+    // cleanup on unmount
+    const cleanupWs = () => {
+      try {
+        ws.send(JSON.stringify({ type: "leave" }));
+      } catch (e) { }
+      try {
+        ws.close();
+      } catch (e) { }
+    };
+
     return () => {
       canvas.dispose();
       cleanupWs();

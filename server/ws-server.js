@@ -96,6 +96,9 @@ wss.on("connection", (ws) => {
       clients.set(ws, updated);
       // inform others about the new user (with null presence)
       broadcast(ws, { type: "user:joined", id: updated.id, name: updated.name, color: updated.color });
+      // send current elements to the newly joined client
+      const msg = JSON.stringify({ type: "elements:init", elements });
+      ws.send(msg);      
     }
 
     if (data.type === "presence") {
