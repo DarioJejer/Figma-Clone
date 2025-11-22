@@ -15,6 +15,11 @@ export default function Home() {
   const wsRef = useRef<WebSocket | null>(null);
   const [ws, setWs] = useState<WebSocket | null>(null);
 
+
+  const isCreating = { current: false } as { current: boolean };
+  const creatingShape: { current: fabric.Object | null } = { current: null };
+  const startPoint: { current: { x: number; y: number } | null } = { current: null };
+
   useEffect(() => {
     // create websocket connection for presence + element sync
     const ws = new WebSocket(process.env.NEXT_PUBLIC_WS_URL ?? "ws://localhost:8080");
@@ -55,8 +60,8 @@ export default function Home() {
         if (data.type === "element:modified") {
           const element = data.element;
           const obj = canvas.getObjects().find((o: any) => o.objectId === element.objectId);
-          if (obj) {            
-            obj.set(element.props);            
+          if (obj) {
+            obj.set(element.props);
             obj.selectable = true;
             obj.evented = true;
             obj.setCoords();
@@ -86,6 +91,9 @@ export default function Home() {
       else {
         const pointer = canvas.getPointer(options.e);
         const created = printShape(canvas, pointer, selectedShape.current);
+        creatingShape.current = created;
+        isCreating.current = true;
+        startPoint.current = { x: pointer.x, y: pointer.y };
 
         // publish created element to WS server
         try {
@@ -98,6 +106,47 @@ export default function Home() {
           console.error("Failed to send element:create message", e);
         }
       }
+    });
+
+    canvas.on("mouse:move", (options: any) => {
+      // You can implement hover effects or other interactions here
+      if (!isCreating.current || !creatingShape.current || !startPoint.current) return;
+
+      const pointer = canvas.getPointer(options.e);
+
+      const sx = startPoint.current.x;
+      const sy = startPoint.current.y;
+
+      const left = Math.min(sx, pointer.x);
+      const top = Math.min(sy, pointer.y);
+
+      // Calculate dimension while ensuring minimum size
+      const width = Math.max(2, Math.abs(pointer.x - sx));
+      const height = Math.max(2, Math.abs(pointer.y - sy));
+
+      if (creatingShape.current instanceof fabric.Rect || creatingShape.current instanceof fabric.Triangle) {
+        creatingShape.current.set({ left, top, width, height });
+      } else if (creatingShape.current instanceof fabric.Circle) {
+        // set circle to cover bounding box
+        const radius = Math.max(1, Math.max(width, height) / 2);
+        // center circle at midpoint
+        const cx = (sx + pointer.x) / 2;
+        const cy = (sy + pointer.y) / 2;
+        creatingShape.current.set({ left: cx - radius, top: cy - radius, radius });
+      }
+      creatingShape.current.setCoords();
+      syncShapeToStorage(creatingShape.current);
+      canvas.renderAll();
+    });
+
+    canvas.on("mouse:up", (options: any) => {
+      if (!isCreating.current) return;
+      creatingShape.current.set({ selectable: true });
+      creatingShape.current.setCoords();
+      syncShapeToStorage(creatingShape.current);
+      creatingShape.current = null;
+      isCreating.current = false;
+      startPoint.current = null;
     });
 
     canvas.on("object:modified", (options: any) => {

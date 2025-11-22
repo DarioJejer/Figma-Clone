@@ -18,7 +18,7 @@ function addCircle(canvas: fabric.Canvas, pointer: any) {
   const circle = new fabric.Circle({
     left: pointer.x,
     top: pointer.y,
-    radius: 20,
+    radius: 2,
     fill: "blue",
     objectId: crypto.randomUUID(),
   });
@@ -30,8 +30,8 @@ function addRectangle(canvas: fabric.Canvas, pointer: any) {
   const rectangle = new fabric.Rect({
     left: pointer.x,
     top: pointer.y,
-    width: 40,
-    height: 30,
+    width: 4,
+    height: 4,
     fill: "red",
     objectId: crypto.randomUUID(),
   });
@@ -43,8 +43,8 @@ function addTriangle(canvas: fabric.Canvas, pointer: any) {
   const triangle = new fabric.Triangle({
     left: pointer.x,
     top: pointer.y,
-    width: 40,
-    height: 40,
+    width: 4,
+    height: 4,
     fill: "green",
     objectId: crypto.randomUUID(),
   });
