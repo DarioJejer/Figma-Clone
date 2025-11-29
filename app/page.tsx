@@ -21,7 +21,7 @@ export default function Home() {
   const startPoint: { current: { x: number; y: number } | null } = { current: null };
 
   useEffect(() => {
-    
+
     // create websocket connection for presence + element sync
     const ws = new WebSocket(process.env.NEXT_PUBLIC_WS_URL ?? "ws://localhost:8080");
     wsRef.current = ws;
@@ -71,6 +71,14 @@ export default function Home() {
 
     canvas.on("mouse:down", (options: any) => {
 
+      canvas.isDrawingMode = false;
+
+      if (selectedShape.current === "line") {
+        canvas.isDrawingMode = true;
+        canvas.freeDrawingBrush.width = 5;
+        return;
+      }
+
       // Check if an object was clicked
       if (options.target) {
         console.log("an object was clicked! ", options.target);
@@ -88,7 +96,9 @@ export default function Home() {
     });
 
     canvas.on("mouse:move", (options: any) => {
-      // You can implement hover effects or other interactions here
+      
+      if (selectedShape.current !== "line") canvas.isDrawingMode = false;
+
       if (!isCreating.current || !creatingShape.current || !startPoint.current) return;
 
       const { left, top, width, height, sx, pointer, sy } = calculateNewShapeValues(canvas, options, startPoint);
@@ -113,6 +123,17 @@ export default function Home() {
       startPoint.current = null;
     });
 
+    canvas.on("path:created", (options: any) => {
+      const path = options.path;
+      if (!path) return;
+
+      path.set({
+        objectId: crypto.randomUUID(), selectable: true, evented: true
+      });
+
+      publishCreatedShape(wsRef, path);
+    });
+
     canvas.on("object:modified", (options: any) => {
       const element = options.target;
       syncShapeToStorage(wsRef, element);
@@ -128,7 +149,7 @@ export default function Home() {
       syncShapeToStorage(wsRef, element);
     });
 
-    
+
 
     // cleanup on unmount
     const cleanupWs = () => {
@@ -173,8 +194,8 @@ function setCircle(width: number, height: number, sx: number, pointer: any, sy: 
 function calculateNewShapeValues(canvas: any, options: any, startPoint: { current: { x: number; y: number; } | null; }) {
   const pointer = canvas.getPointer(options.e);
 
-  const sx = startPoint.current.x;
-  const sy = startPoint.current.y;
+  const sx = startPoint.current!.x;
+  const sy = startPoint.current!.y;
 
   const left = Math.min(sx, pointer.x);
   const top = Math.min(sy, pointer.y);
@@ -195,13 +216,13 @@ function createShape(canvas: any, options: any, selectedShape: any, creatingShap
 }
 
 function syncShapeToStorage(wsRef: React.MutableRefObject<WebSocket | null>, element: fabric.Object) {
-      const elementId = element.objectId;
-      const payload = { type: element.type, objectId: elementId, props: element.toObject() };
-      const socketNow = wsRef.current;
-      if (socketNow && socketNow.readyState === WebSocket.OPEN) {
-        socketNow.send(JSON.stringify({ type: "element:modify", payload: payload }));
-      }
-    };
+  const elementId = element.objectId;
+  const payload = { type: element.type, objectId: elementId, props: element.toObject() };
+  const socketNow = wsRef.current;
+  if (socketNow && socketNow.readyState === WebSocket.OPEN) {
+    socketNow.send(JSON.stringify({ type: "element:modify", payload: payload }));
+  }
+};
 
 function publishCreatedShape(wsRef: React.MutableRefObject<WebSocket | null>, created: any) {
   const socketNow = wsRef.current;
