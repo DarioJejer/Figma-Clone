@@ -74,13 +74,31 @@ export default function Home() {
     });
 
     canvas.on("mouse:down", (options: any) => {
+      const target = options.target;
+      const currentTool = selectedShape.current;
 
-      // Check if an object was clicked
-      if (options.target) {
-        console.log("an object was clicked! ", options.target);
+      // If an object was clicked
+      if (target) {
+        // If delete tool is active, remove the clicked object
+        if (currentTool === "delete") {
+          canvas.remove(target);
+          canvas.discardActiveObject();
+          canvas.renderAll();
+          try {
+            wsRef.current?.send(JSON.stringify({ type: "element:delete", payload: { objectId: target.objectId } }));
+          } catch (e) {
+            console.error("Failed to send element:delete message", e);
+          }
+        } else {
+          // let fabric handle selection when other tools are active
+        }
       }
-      // If no object was clicked, add a new shape at the pointer location
+      // If no object was clicked
       else {
+        // If delete tool is active, clicking empty area does nothing
+        if (currentTool === "delete") return;
+
+        // otherwise create a new shape at the pointer location
         const created = createShape(canvas, options, selectedShape, creatingShape, isCreating, startPoint);
         // publish created element to WS server
         try {
