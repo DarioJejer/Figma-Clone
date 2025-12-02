@@ -135,6 +135,11 @@ wss.on("connection", (ws) => {
       }
     }
 
+    if (data.type === "element:delete_all") {
+      elements.splice(0, elements.length);
+      broadcast(ws, { type: "elements:cleared" });
+    }
+
     if (data.type === "leave") {
       if (client) {
         broadcast(ws, { type: "user:left", id: client.id });

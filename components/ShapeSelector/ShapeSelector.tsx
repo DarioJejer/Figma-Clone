@@ -6,9 +6,10 @@ import Image from "next/image";
 
 type Props = {
   canvasSelectedShape: React.MutableRefObject<string>;
+  onReset: () => void;
 };
 
-export default function ShapeSelector({ canvasSelectedShape }: Props) {
+export default function ShapeSelector({ canvasSelectedShape, onReset }: Props) {
   const [selectedShape, setSelectedShape] =  useState<string>("");
 
   return (
@@ -23,6 +24,10 @@ export default function ShapeSelector({ canvasSelectedShape }: Props) {
           p-2 rounded-lg 
           ` + (addSelectedStyles(shape))} 
         onClick={() => {
+          if (shape.value === "reset") {
+            onReset();
+            return;
+          }
           setSelectedShape(shape.value)
           canvasSelectedShape.current = shape.value;
         }}

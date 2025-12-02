@@ -33,4 +33,9 @@ export const shapeElements : { icon: string; name: string; value: string }[] = [
     name: "Delete",
     value: "delete",
   },
+  {
+    icon: "/assets/reset.svg",
+    name: "Reset",
+    value: "reset",
+  },
 ];

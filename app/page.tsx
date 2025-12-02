@@ -9,6 +9,7 @@ import PresenceCursors from "@/components/CursorsPresence/CursorsPresence";
 export default function Home() {
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const fabricCanvasRef = useRef<fabric.Canvas | null>(null);
 
   // We're using refs here because we want to access these variables inside the event listeners
   const selectedShape = useRef<string>("");
@@ -20,8 +21,23 @@ export default function Home() {
   const creatingShape: { current: fabric.Object | null } = { current: null };
   const startPoint: { current: { x: number; y: number } | null } = { current: null };
 
+  const handleReset = () => {
+    const canvas = fabricCanvasRef.current;
+    if (!canvas) return;
+    // clear all objects from canvas
+    canvas.clear();
+    canvas.renderAll();
+
+    // notify server to clear project state for everyone
+    try {
+      wsRef.current?.send(JSON.stringify({ type: "element:delete_all" }));
+    } catch (e) {
+      console.error("Failed to send element:delete_all message", e);
+    }
+  };
+
   useEffect(() => {
-    
+
     // create websocket connection for presence + element sync
     const ws = new WebSocket(process.env.NEXT_PUBLIC_WS_URL ?? "ws://localhost:8080");
     wsRef.current = ws;
@@ -56,6 +72,10 @@ export default function Home() {
             elementDeletedHandler(data, canvas);
             break;
 
+          case "elements:cleared":
+            elementClearedHandler(data, canvas);
+            break;
+
           default:
             break;
         }
@@ -72,6 +92,9 @@ export default function Home() {
       width: canvasElement?.clientWidth,
       height: canvasElement?.clientHeight,
     });
+
+    // store fabric canvas instance for external handlers
+    fabricCanvasRef.current = canvas;
 
     canvas.on("mouse:down", (options: any) => {
       const target = options.target;
@@ -196,7 +219,7 @@ export default function Home() {
   return (
     <main className="flex flex-col h-screen ">
       <h1 className="text-4xl font-bold h-16 flex justify-center items-center">Figma Clone</h1>
-      <ShapeSelector canvasSelectedShape={selectedShape} />
+      <ShapeSelector canvasSelectedShape={selectedShape} onReset={handleReset} />
       <div id="canvas-window" className="flex-1 relative bg-gray-100">
         <canvas ref={canvasRef} className="absolute inset-0 w-full h-full" />
         <PresenceCursors ws={ws} />
@@ -239,13 +262,13 @@ function createShape(canvas: any, options: any, selectedShape: any, creatingShap
 }
 
 function syncShapeToStorage(wsRef: React.MutableRefObject<WebSocket | null>, element: fabric.Object) {
-      const elementId = element.objectId;
-      const payload = { type: element.type, objectId: elementId, props: element.toObject() };
-      const socketNow = wsRef.current;
-      if (socketNow && socketNow.readyState === WebSocket.OPEN) {
-        socketNow.send(JSON.stringify({ type: "element:modify", payload: payload }));
-      }
-    };
+  const elementId = element.objectId;
+  const payload = { type: element.type, objectId: elementId, props: element.toObject() };
+  const socketNow = wsRef.current;
+  if (socketNow && socketNow.readyState === WebSocket.OPEN) {
+    socketNow.send(JSON.stringify({ type: "element:modify", payload: payload }));
+  }
+};
 
 function publishCreatedShape(wsRef: React.MutableRefObject<WebSocket | null>, created: any) {
   const socketNow = wsRef.current;
@@ -286,6 +309,11 @@ function elementDeletedHandler(data: any, canvas: any) {
     canvas.remove(obj);
     canvas.renderAll();
   }
+}
+
+function elementClearedHandler(_data: any, canvas: any) {
+  canvas.clear();
+  canvas.renderAll();
 }
 
 function getStorageElementes(data: any, canvas: any) {
