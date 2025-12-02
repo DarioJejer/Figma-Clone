@@ -1,8 +1,7 @@
-
-
 import { shapeElements } from "@/lib/shapes"
 import { useState } from "react";
 import Image from "next/image";
+import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
 
 type Props = {
   canvasSelectedShape: React.MutableRefObject<string>;
@@ -11,6 +10,7 @@ type Props = {
 
 export default function ShapeSelector({ canvasSelectedShape, onReset }: Props) {
   const [selectedShape, setSelectedShape] =  useState<string>("");
+  const [showResetModal, setShowResetModal] = useState<boolean>(false);
 
   return (
     <div 
@@ -25,7 +25,7 @@ export default function ShapeSelector({ canvasSelectedShape, onReset }: Props) {
           ` + (addSelectedStyles(shape))} 
         onClick={() => {
           if (shape.value === "reset") {
-            onReset();
+            setShowResetModal(true);
             return;
           }
           setSelectedShape(shape.value)
@@ -37,6 +37,13 @@ export default function ShapeSelector({ canvasSelectedShape, onReset }: Props) {
         </div>
       </button>
     ))}
+
+    <ConfirmModal
+      open={showResetModal}
+      onConfirm={() => { onReset(); setShowResetModal(false); }}
+      onCancel={() => setShowResetModal(false)}
+    />
+
     </div>
   )
 

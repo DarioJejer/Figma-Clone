@@ -21,14 +21,13 @@ export default function Home() {
   const creatingShape: { current: fabric.Object | null } = { current: null };
   const startPoint: { current: { x: number; y: number } | null } = { current: null };
 
-  const handleReset = () => {
+  // perform the actual reset (clear canvas + notify server)
+  const performReset = () => {
     const canvas = fabricCanvasRef.current;
     if (!canvas) return;
-    // clear all objects from canvas
     canvas.clear();
     canvas.renderAll();
 
-    // notify server to clear project state for everyone
     try {
       wsRef.current?.send(JSON.stringify({ type: "element:delete_all" }));
     } catch (e) {
@@ -219,7 +218,7 @@ export default function Home() {
   return (
     <main className="flex flex-col h-screen ">
       <h1 className="text-4xl font-bold h-16 flex justify-center items-center">Figma Clone</h1>
-      <ShapeSelector canvasSelectedShape={selectedShape} onReset={handleReset} />
+      <ShapeSelector canvasSelectedShape={selectedShape} onReset={performReset} />
       <div id="canvas-window" className="flex-1 relative bg-gray-100">
         <canvas ref={canvasRef} className="absolute inset-0 w-full h-full" />
         <PresenceCursors ws={ws} />
