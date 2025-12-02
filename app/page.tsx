@@ -52,6 +52,10 @@ export default function Home() {
             elementModifiedHandler(data, canvas);
             break;
 
+          case "element:deleted":
+            elementDeletedHandler(data, canvas);
+            break;
+
           default:
             break;
         }
@@ -128,7 +132,28 @@ export default function Home() {
       syncShapeToStorage(wsRef, element);
     });
 
-    
+    // Handle Delete key to remove selected object
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Delete") {
+        const activeObjects = canvas.getActiveObjects();
+        if (activeObjects.length > 0) {
+          activeObjects.forEach((activeObject: any) => {
+            canvas.remove(activeObject);
+            try {
+              wsRef.current?.send(JSON.stringify({
+                type: "element:delete",
+                payload: { objectId: activeObject.objectId }
+              }));
+            } catch (e) {
+              console.error("Failed to send element:delete message for element", activeObject.objectId, e);
+            }
+          });
+          canvas.discardActiveObject();
+          canvas.renderAll();
+        }
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
 
     // cleanup on unmount
     const cleanupWs = () => {
@@ -144,6 +169,7 @@ export default function Home() {
     };
 
     return () => {
+      window.removeEventListener("keydown", handleKeyDown);
       canvas.dispose();
       cleanupWs();
     };
@@ -233,6 +259,15 @@ function elementCreatedHandler(data: any, canvas: any) {
     canvas.renderAll();
   });
   return element;
+}
+
+function elementDeletedHandler(data: any, canvas: any) {
+  const objectId = data.objectId;
+  const obj = canvas.getObjects().find((o: any) => o.objectId === objectId);
+  if (obj) {
+    canvas.remove(obj);
+    canvas.renderAll();
+  }
 }
 
 function getStorageElementes(data: any, canvas: any) {
