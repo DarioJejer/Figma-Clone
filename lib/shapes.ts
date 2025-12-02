@@ -9,6 +9,11 @@ export enum Shapes {
 
 export const shapeElements : { icon: string; name: string; value: string }[] = [
   {
+    icon: "/assets/select.svg",
+    name: "Select",
+    value: "select",
+  },
+  {
     icon: "/assets/rectangle.svg",
     name: "Rectangle",
     value: "rectangle",

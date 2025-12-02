@@ -11,7 +11,7 @@ export default function Home() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   // We're using refs here because we want to access these variables inside the event listeners
-  const selectedShape = useRef<string>("");
+  const selectedShape = useRef<string>("select");
   const wsRef = useRef<WebSocket | null>(null);
   const [ws, setWs] = useState<WebSocket | null>(null);
 
@@ -71,6 +71,14 @@ export default function Home() {
 
     canvas.on("mouse:down", (options: any) => {
 
+      // Handle selection mode
+      if (selectedShape.current === "select") {
+        canvas.selection = true;
+        return;
+      }
+      canvas.selection = false;
+
+      // Required here to properly handle line drawing mode
       canvas.isDrawingMode = false;
 
       if (selectedShape.current === "line") {
@@ -83,10 +91,8 @@ export default function Home() {
       if (options.target) {
         console.log("an object was clicked! ", options.target);
       }
-      // If no object was clicked, add a new shape at the pointer location
       else {
         const created = createShape(canvas, options, selectedShape, creatingShape, isCreating, startPoint);
-        // publish created element to WS server
         try {
           publishCreatedShape(wsRef, created);
         } catch (e) {
@@ -96,9 +102,10 @@ export default function Home() {
     });
 
     canvas.on("mouse:move", (options: any) => {
-      
+
       if (selectedShape.current !== "line") canvas.isDrawingMode = false;
 
+      // Validation checks for shape creation
       if (!isCreating.current || !creatingShape.current || !startPoint.current) return;
 
       const { left, top, width, height, sx, pointer, sy } = calculateNewShapeValues(canvas, options, startPoint);
@@ -148,7 +155,6 @@ export default function Home() {
       const element = options.target;
       syncShapeToStorage(wsRef, element);
     });
-
 
 
     // cleanup on unmount
