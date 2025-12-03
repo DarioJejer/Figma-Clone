@@ -33,4 +33,14 @@ export const shapeElements : { icon: string; name: string; value: string }[] = [
     name: "Line",
     value: "line",
   },
+  {
+    icon: "/assets/delete.svg",
+    name: "Delete",
+    value: "delete",
+  },
+  {
+    icon: "/assets/reset.svg",
+    name: "Reset",
+    value: "reset",
+  },
 ];

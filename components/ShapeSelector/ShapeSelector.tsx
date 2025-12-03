@@ -1,18 +1,19 @@
-
-
 import { shapeElements } from "@/lib/shapes"
 import { useState } from "react";
 import Image from "next/image";
 import StrokeWidthSlider from "./StrokeWidthSlider";
+import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
 
 type Props = {
   canvasSelectedShape: React.MutableRefObject<string>;
   strokeWidth: number;
   onStrokeWidthChange: (w: number) => void;
+  onReset: () => void;
 };
 
-export default function ShapeSelector({ canvasSelectedShape, strokeWidth, onStrokeWidthChange }: Props) {
+export default function ShapeSelector({ canvasSelectedShape, strokeWidth, onStrokeWidthChange, onReset }: Props) {
   const [selectedShape, setSelectedShape] = useState<string>("");
+  const [showResetModal, setShowResetModal] = useState<boolean>(false);
 
   return (
     <div
@@ -22,10 +23,15 @@ export default function ShapeSelector({ canvasSelectedShape, strokeWidth, onStro
       {shapeElements.map(shape => (
         <div key={shape.value} className="relative">
           <button
+            key={shape.value}
             className={`
             p-2 rounded-lg 
             ` + (addSelectedStyles(shape))}
             onClick={() => {
+              if (shape.value === "reset") {
+                setShowResetModal(true);
+                return;
+              }
               setSelectedShape(shape.value)
               canvasSelectedShape.current = shape.value;
             }}
@@ -39,6 +45,13 @@ export default function ShapeSelector({ canvasSelectedShape, strokeWidth, onStro
           )}
         </div>
       ))}
+
+      <ConfirmModal
+        open={showResetModal}
+        onConfirm={() => { onReset(); setShowResetModal(false); }}
+        onCancel={() => setShowResetModal(false)}
+      />
+
     </div>
   )
 

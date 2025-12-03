@@ -9,7 +9,7 @@ import PresenceCursors from "@/components/CursorsPresence/CursorsPresence";
 export default function Home() {
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const fabricCanvasRef = useRef<any | null>(null);
+  const fabricCanvasRef = useRef<fabric.Canvas | null>(null);
 
   // We're using refs here because we want to access these variables inside the event listeners
   const selectedShape = useRef<string>("select");
@@ -23,8 +23,22 @@ export default function Home() {
   const creatingShape: { current: fabric.Object | null } = { current: null };
   const startPoint: { current: { x: number; y: number } | null } = { current: null };
 
-  useEffect(() => {
+  // perform the actual reset (clear canvas + notify server)
+  const performReset = () => {
+    const canvas = fabricCanvasRef.current;
+    if (!canvas) return;
+    canvas.clear();
+    canvas.renderAll();
 
+    try {
+      wsRef.current?.send(JSON.stringify({ type: "element:delete_all" }));
+    } catch (e) {
+      console.error("Failed to send element:delete_all message", e);
+    }
+  };
+
+  useEffect(() => {
+    
     // create websocket connection for presence + element sync
     const ws = new WebSocket(process.env.NEXT_PUBLIC_WS_URL ?? "ws://localhost:8080");
     wsRef.current = ws;
@@ -53,6 +67,14 @@ export default function Home() {
 
           case "element:modified":
             elementModifiedHandler(data, canvas);
+            break;
+
+          case "element:deleted":
+            elementDeletedHandler(data, canvas);
+            break;
+
+          case "elements:cleared":
+            elementClearedHandler(data, canvas);
             break;
 
           default:
@@ -97,7 +119,29 @@ export default function Home() {
       if (options.target) {
         console.log("an object was clicked! ", options.target);
       }
+      const target = options.target;
+      const currentTool = selectedShape.current;
+
+      // If an object was clicked
+      if (target) {
+        // If delete tool is active, remove the clicked object
+        if (currentTool === "delete") {
+          canvas.remove(target);
+          canvas.discardActiveObject();
+          canvas.renderAll();
+          try {
+            wsRef.current?.send(JSON.stringify({ type: "element:delete", payload: { objectId: target.objectId } }));
+          } catch (e) {
+            console.error("Failed to send element:delete message", e);
+          }
+        }
+      }
+      // If no object was clicked
       else {
+        // If delete tool is active, clicking empty area does nothing
+        if (currentTool === "delete") return;
+
+        // otherwise create a new shape at the pointer location
         const created = createShape(canvas, options, selectedShape, creatingShape, isCreating, startPoint);
         try {
           publishCreatedShape(wsRef, created);
@@ -162,6 +206,28 @@ export default function Home() {
       syncShapeToStorage(wsRef, element);
     });
 
+    // Handle Delete key to remove selected object
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Delete") {
+        const activeObjects = canvas.getActiveObjects();
+        if (activeObjects.length > 0) {
+          activeObjects.forEach((activeObject: any) => {
+            canvas.remove(activeObject);
+            try {
+              wsRef.current?.send(JSON.stringify({
+                type: "element:delete",
+                payload: { objectId: activeObject.objectId }
+              }));
+            } catch (e) {
+              console.error("Failed to send element:delete message for element", activeObject.objectId, e);
+            }
+          });
+          canvas.discardActiveObject();
+          canvas.renderAll();
+        }
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
 
     // cleanup on unmount
     const cleanupWs = () => {
@@ -177,6 +243,7 @@ export default function Home() {
     };
 
     return () => {
+      window.removeEventListener("keydown", handleKeyDown);
       canvas.dispose();
       cleanupWs();
     };
@@ -193,7 +260,7 @@ export default function Home() {
     return (
       <main className="flex flex-col h-screen ">
         <h1 className="text-4xl font-bold h-16 flex justify-center items-center">Figma Clone</h1>
-        <ShapeSelector canvasSelectedShape={selectedShape} strokeWidth={strokeWidth} onStrokeWidthChange={handleStrokeWidthChange} />
+        <ShapeSelector canvasSelectedShape={selectedShape} strokeWidth={strokeWidth} onStrokeWidthChange={handleStrokeWidthChange} onReset={performReset} />
         <div id="canvas-window" className="flex-1 relative bg-gray-100">
           <canvas ref={canvasRef} className="absolute inset-0 w-full h-full" />
           <PresenceCursors ws={ws} />
@@ -235,14 +302,14 @@ export default function Home() {
     return created;
   }
 
-  function syncShapeToStorage(wsRef: React.MutableRefObject<WebSocket | null>, element: fabric.Object) {
-    const elementId = element.objectId;
-    const payload = { type: element.type, objectId: elementId, props: element.toObject() };
-    const socketNow = wsRef.current;
-    if (socketNow && socketNow.readyState === WebSocket.OPEN) {
-      socketNow.send(JSON.stringify({ type: "element:modify", payload: payload }));
-    }
-  };
+function syncShapeToStorage(wsRef: React.MutableRefObject<WebSocket | null>, element: fabric.Object) {
+  const elementId = element.objectId;
+  const payload = { type: element.type, objectId: elementId, props: element.toObject() };
+  const socketNow = wsRef.current;
+  if (socketNow && socketNow.readyState === WebSocket.OPEN) {
+    socketNow.send(JSON.stringify({ type: "element:modify", payload: payload }));
+  }
+};
 
   function publishCreatedShape(wsRef: React.MutableRefObject<WebSocket | null>, created: any) {
     const socketNow = wsRef.current;
@@ -264,17 +331,31 @@ export default function Home() {
     }
   }
 
-  function elementCreatedHandler(data: any, canvas: any) {
-    const element = data.element;
-    fabric.util.enlivenObjects([element.props], function (enlivenedObjects: any) {
-      enlivenedObjects.forEach(function (obj: any) {
-        obj.objectId = element.objectId; // restore objectId
-        canvas.add(obj);
-      });
-      canvas.renderAll();
+function elementCreatedHandler(data: any, canvas: any) {
+  const element = data.element;
+  fabric.util.enlivenObjects([element.props], function (enlivenedObjects: any) {
+    enlivenedObjects.forEach(function (obj: any) {
+      obj.objectId = element.objectId; // restore objectId
+      canvas.add(obj);
     });
-    return element;
+    canvas.renderAll();
+  });
+  return element;
+}
+
+function elementDeletedHandler(data: any, canvas: any) {
+  const objectId = data.objectId;
+  const obj = canvas.getObjects().find((o: any) => o.objectId === objectId);
+  if (obj) {
+    canvas.remove(obj);
+    canvas.renderAll();
   }
+}
+
+function elementClearedHandler(_data: any, canvas: any) {
+  canvas.clear();
+  canvas.renderAll();
+}
 
   function getStorageElementes(data: any, canvas: any) {
     data.elements.forEach((element: any) => {

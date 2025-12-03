@@ -126,6 +126,20 @@ wss.on("connection", (ws) => {
       }
     }
 
+    if (data.type === "element:delete") {
+      const payload = data.payload;
+      const index = elements.findIndex((el) => el.objectId === payload.objectId);
+      if (index !== -1) {
+        elements.splice(index, 1);
+        broadcast(ws, { type: "element:deleted", objectId: payload.objectId });
+      }
+    }
+
+    if (data.type === "element:delete_all") {
+      elements.splice(0, elements.length);
+      broadcast(ws, { type: "elements:cleared" });
+    }
+
     if (data.type === "leave") {
       if (client) {
         broadcast(ws, { type: "user:left", id: client.id });
