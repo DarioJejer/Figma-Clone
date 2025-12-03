@@ -208,8 +208,13 @@ export default function Home() {
       syncShapeToStorage(wsRef, element);
     });
 
-    // Handle Delete key to remove selected object
     const handleKeyDown = (event: KeyboardEvent) => {
+      
+      if (event.key === "Escape") {       
+          canvas.discardActiveObject();
+          canvas.renderAll();
+      }
+      
       if (event.key === "Delete") {
         const activeObjects = canvas.getActiveObjects();
         if (activeObjects.length > 0) {
