@@ -324,6 +324,12 @@ function calculateNewShapeValues(canvas: any, options: any, startPoint: { curren
 function createShape(canvas: any, options: any, selectedShape: any, creatingShape: { current: fabric.Object | null; }, isCreating: { current: boolean; }, startPoint: { current: { x: number; y: number; } | null; }, color: string) {
   const pointer = canvas.getPointer(options.e);
   const created = printShape(canvas, pointer, selectedShape.current, color);
+  if (created instanceof fabric.Textbox) {
+    created.enterEditing();
+    canvas.setActiveObject(created);
+    created.setCoords();
+    return created;
+  }
   creatingShape.current = created;
   isCreating.current = true;
   startPoint.current = { x: pointer.x, y: pointer.y };
