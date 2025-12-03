@@ -22,7 +22,8 @@ export default function Home() {
 
   const isCreating = { current: false } as { current: boolean };
   const creatingShape: { current: fabric.Object | null } = { current: null };
-  const startPoint: { current: { x: number; y: number } | null } = { current: null };
+  const startPoint: { current: { x: number; y: number } | null } = { current: null };  
+  const selectedColorRef = useRef<string>("#000000");
 
   // perform the actual reset (clear canvas + notify server)
   const performReset = () => {
@@ -111,8 +112,8 @@ export default function Home() {
 
       if (selectedShape.current === "line") {
         canvas.isDrawingMode = true;
-        // use latest stroke width for free drawing
         canvas.freeDrawingBrush.width = strokeWidthRef.current;
+        canvas.freeDrawingBrush.color = selectedColorRef.current;
         return;
       }
 
@@ -143,7 +144,7 @@ export default function Home() {
         if (currentTool === "delete") return;
 
         // otherwise create a new shape at the pointer location
-        const created = createShape(canvas, options, selectedShape, creatingShape, isCreating, startPoint);
+        const created = createShape(canvas, options, selectedShape, creatingShape, isCreating, startPoint, selectedColorRef.current);
         try {
           publishCreatedShape(wsRef, created);
         } catch (e) {
@@ -179,7 +180,6 @@ export default function Home() {
       creatingShape.current = null;
       isCreating.current = false;
       startPoint.current = null;
-      selectedShape.current = "select";
     });
 
     canvas.on("path:created", (options: any) => {
@@ -263,7 +263,7 @@ export default function Home() {
     <main className="flex flex-col h-screen ">
       <h1 className="text-4xl font-bold h-16 flex justify-center items-center">Figma Clone</h1>
       <ShapeSelector canvasSelectedShape={selectedShape} strokeWidth={strokeWidth} onStrokeWidthChange={handleStrokeWidthChange} onReset={performReset} />
-      <ColorPicker />
+      <ColorPicker onColorSelect={(c: string) => { selectedColorRef.current = c; }} />
       <div id="canvas-window" className="flex-1 relative bg-gray-100">
         <canvas ref={canvasRef} className="absolute inset-0 w-full h-full" />
         <PresenceCursors ws={ws} />
@@ -296,9 +296,9 @@ function calculateNewShapeValues(canvas: any, options: any, startPoint: { curren
   return { left, top, width, height, sx, pointer, sy };
 }
 
-function createShape(canvas: any, options: any, selectedShape: any, creatingShape: { current: fabric.Object | null; }, isCreating: { current: boolean; }, startPoint: { current: { x: number; y: number; } | null; }) {
+function createShape(canvas: any, options: any, selectedShape: any, creatingShape: { current: fabric.Object | null; }, isCreating: { current: boolean; }, startPoint: { current: { x: number; y: number; } | null; } , color: string) {
   const pointer = canvas.getPointer(options.e);
-  const created = printShape(canvas, pointer, selectedShape.current);
+  const created = printShape(canvas, pointer, selectedShape.current, color);
   creatingShape.current = created;
   isCreating.current = true;
   startPoint.current = { x: pointer.x, y: pointer.y };
