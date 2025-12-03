@@ -178,6 +178,7 @@ export default function Home() {
       creatingShape.current = null;
       isCreating.current = false;
       startPoint.current = null;
+      selectedShape.current = "select";
     });
 
     canvas.on("path:created", (options: any) => {

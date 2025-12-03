@@ -8,7 +8,9 @@ export const printShape = (canvas: fabric.Canvas, pointer: any, selectedShape: s
     case "rectangle":
       return addRectangle(canvas, pointer);
     case "triangle":
-      return addTriangle(canvas, pointer);
+      return addTriangle(canvas, pointer);  
+    case "text":
+      return addText(canvas, pointer);
     default:
       return null;
   }
@@ -50,4 +52,16 @@ function addTriangle(canvas: fabric.Canvas, pointer: any) {
   });
   canvas.add(triangle);
   return triangle;
+}
+
+function addText(canvas: fabric.Canvas, pointer: any) {
+  const textbox = new fabric.Textbox("Text", {
+    left: pointer.x,
+    top: pointer.y,
+    fontSize: 20,
+    fill: "#000000",
+    objectId: crypto.randomUUID(),
+  });
+  canvas.add(textbox);
+  return textbox;
 }

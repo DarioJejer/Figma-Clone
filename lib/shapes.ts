@@ -32,6 +32,11 @@ export const shapeElements : { icon: string; name: string; value: string }[] = [
     icon: "/assets/line.svg",
     name: "Line",
     value: "line",
+  },  
+  {
+    icon: "/assets/text.svg",
+    name: "Text",
+    value: "text",
   },
   {
     icon: "/assets/delete.svg",
