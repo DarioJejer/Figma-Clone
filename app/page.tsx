@@ -22,7 +22,7 @@ export default function Home() {
 
   const isCreating = { current: false } as { current: boolean };
   const creatingShape: { current: fabric.Object | null } = { current: null };
-  const startPoint: { current: { x: number; y: number } | null } = { current: null };  
+  const startPoint: { current: { x: number; y: number } | null } = { current: null };
   const selectedColorRef = useRef<string>("#000000");
 
   // perform the actual reset (clear canvas + notify server)
@@ -259,11 +259,36 @@ export default function Home() {
     }
   }
 
+  function handleColorSelect(c: string) {
+    selectedColorRef.current = c;
+    const canvas = fabricCanvasRef.current;
+    if (!canvas) return;
+    const activeObjects = canvas.getActiveObjects();
+    if (activeObjects && activeObjects.length > 0) {
+      activeObjects.forEach((obj: any) => {
+        if (obj.type === "path") {
+          obj.set({ stroke: c });
+        }
+        else {
+          obj.set({ fill: c });
+          obj.setCoords();
+        }
+        try {
+          syncShapeToStorage(wsRef, obj);
+        } catch (e) {
+          console.error("Failed to apply color to object", e);
+        }
+      });
+      canvas.renderAll();
+    }
+  };
+
+
   return (
     <main className="flex flex-col h-screen ">
       <h1 className="text-4xl font-bold h-16 flex justify-center items-center">Figma Clone</h1>
       <ShapeSelector canvasSelectedShape={selectedShape} strokeWidth={strokeWidth} onStrokeWidthChange={handleStrokeWidthChange} onReset={performReset} />
-      <ColorPicker onColorSelect={(c: string) => { selectedColorRef.current = c; }} />
+      <ColorPicker onColorSelect={handleColorSelect} />
       <div id="canvas-window" className="flex-1 relative bg-gray-100">
         <canvas ref={canvasRef} className="absolute inset-0 w-full h-full" />
         <PresenceCursors ws={ws} />
@@ -296,7 +321,7 @@ function calculateNewShapeValues(canvas: any, options: any, startPoint: { curren
   return { left, top, width, height, sx, pointer, sy };
 }
 
-function createShape(canvas: any, options: any, selectedShape: any, creatingShape: { current: fabric.Object | null; }, isCreating: { current: boolean; }, startPoint: { current: { x: number; y: number; } | null; } , color: string) {
+function createShape(canvas: any, options: any, selectedShape: any, creatingShape: { current: fabric.Object | null; }, isCreating: { current: boolean; }, startPoint: { current: { x: number; y: number; } | null; }, color: string) {
   const pointer = canvas.getPointer(options.e);
   const created = printShape(canvas, pointer, selectedShape.current, color);
   creatingShape.current = created;
