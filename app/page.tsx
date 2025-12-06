@@ -6,6 +6,7 @@ import ShapeSelector from "@/components/ShapeSelector/ShapeSelector";
 import { printShape } from "@/lib/canvas";
 import PresenceCursors from "@/components/CursorsPresence/CursorsPresence";
 import ColorPicker from "@/components/ColorPicker/ColorPicker";
+import { getOrCreateUser } from "@/lib/user";
 
 export default function Home() {
 
@@ -49,7 +50,10 @@ export default function Home() {
 
     const onOpen = () => {
       try {
-        ws.send(JSON.stringify({ type: "join" }));
+        const user = getOrCreateUser();
+        ws.send(
+          JSON.stringify({ type: "join", name: user.name, color: user.avatarColor})
+        );
       } catch (e) { }
     };
     ws.addEventListener("open", onOpen);
@@ -209,12 +213,12 @@ export default function Home() {
     });
 
     const handleKeyDown = (event: KeyboardEvent) => {
-      
-      if (event.key === "Escape") {       
-          canvas.discardActiveObject();
-          canvas.renderAll();
+
+      if (event.key === "Escape") {
+        canvas.discardActiveObject();
+        canvas.renderAll();
       }
-      
+
       if (event.key === "Delete") {
         const activeObjects = canvas.getActiveObjects();
         if (activeObjects.length > 0) {
