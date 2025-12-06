@@ -6,7 +6,9 @@ import ShapeSelector from "@/components/ShapeSelector/ShapeSelector";
 import { printShape } from "@/lib/canvas";
 import PresenceCursors from "@/components/CursorsPresence/CursorsPresence";
 import ColorPicker from "@/components/ColorPicker/ColorPicker";
-import { getOrCreateUser } from "@/lib/user";
+import UserDisplay from "@/components/User/UserDisplay";
+import UserSettings from "@/components/User/UserSettings";
+import { getOrCreateUser, updateCurrentUser } from "@/lib/user";
 
 export default function Home() {
 
@@ -19,6 +21,7 @@ export default function Home() {
   const [ws, setWs] = useState<WebSocket | null>(null);
   const strokeWidthRef = useRef<number>(5);
   const [strokeWidth, setStrokeWidth] = useState<number>(5);
+  const [isUserSettingsOpen, setIsUserSettingsOpen] = useState(false);
 
 
   const isCreating = { current: false } as { current: boolean };
@@ -54,7 +57,7 @@ export default function Home() {
         ws.send(
           JSON.stringify({ type: "join", name: user.name, color: user.avatarColor})
         );
-      } catch (e) { }
+      } catch (e) {}
     };
     ws.addEventListener("open", onOpen);
 
@@ -213,12 +216,12 @@ export default function Home() {
     });
 
     const handleKeyDown = (event: KeyboardEvent) => {
-
-      if (event.key === "Escape") {
-        canvas.discardActiveObject();
-        canvas.renderAll();
+      
+      if (event.key === "Escape") {       
+          canvas.discardActiveObject();
+          canvas.renderAll();
       }
-
+      
       if (event.key === "Delete") {
         const activeObjects = canvas.getActiveObjects();
         if (activeObjects.length > 0) {
@@ -292,16 +295,39 @@ export default function Home() {
     }
   };
 
+  function handleUserChange(name: string, color: string) {
+
+    updateCurrentUser({ name, avatarColor: color });
+    // Broadcast updated user info to other clients
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      try {
+        wsRef.current.send(
+          JSON.stringify({ type: "user:update", name, color })
+        );
+      } catch (e) {
+        console.error("Failed to broadcast user update", e);
+      }
+    }
+  }
+
 
   return (
     <main className="flex flex-col h-screen ">
-      <h1 className="text-4xl font-bold h-16 flex justify-center items-center">Figma Clone</h1>
+      <div className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-6">
+        <h1 className="text-4xl font-bold">Figma Clone</h1>
+        <UserDisplay onClick={() => setIsUserSettingsOpen(true)} />
+      </div>
       <ShapeSelector canvasSelectedShape={selectedShape} strokeWidth={strokeWidth} onStrokeWidthChange={handleStrokeWidthChange} onReset={performReset} />
       <ColorPicker onColorSelect={handleColorSelect} />
       <div id="canvas-window" className="flex-1 relative bg-gray-100">
         <canvas ref={canvasRef} className="absolute inset-0 w-full h-full" />
         <PresenceCursors ws={ws} />
       </div>
+      <UserSettings
+        isOpen={isUserSettingsOpen}
+        onClose={() => setIsUserSettingsOpen(false)}
+        onUserChange={handleUserChange}
+      />
     </main>
   );
 }
