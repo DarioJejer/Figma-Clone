@@ -8,26 +8,53 @@ const wss = new WebSocket.Server({ port: PORT });
 // Keep a map of clients and their latest presence
 const clients = new Map();
 
+// Map of roomId (string) -> Map of WebSocket -> client object
+const rooms = new Map();
+
 // Helper function to broadcast only to clients in the same room
 function broadcastToRoom(sender, payload, roomId) {
   const msg = JSON.stringify(payload);
-
-  for (const [ws, client] of clients) {
-    if (ws !== sender && client.roomId === roomId && ws.readyState === WebSocket.OPEN) {
-      ws.send(msg);
+  const roomMap = rooms.get(String(roomId));
+  if (!roomMap) return;
+  for (const [ws] of roomMap) {
+    try {
+      if (ws !== sender && ws.readyState === WebSocket.OPEN) {
+        ws.send(msg);
+      }
+    } catch (e) {
+      // ignore
     }
   }
 }
 
 // Helper function to get users in a specific room
-function getUsersInRoom(sender, roomId) {
+function getUsersInRoom(roomId) {
   const users = [];
-  for (const [ws, client] of clients) {
-    if (client && client.roomId === roomId && ws !== sender && client.id) {
-      users.push({ id: client.id, name: client.name, color: client.color });
-    }
+  const roomMap = rooms.get(String(roomId));
+  if (!roomMap) return users;
+  for (const [, client] of roomMap) {
+    if (client && client.id) users.push({ id: client.id, name: client.name, color: client.color });
   }
   return users;
+}
+
+function addClientToRoom(ws, roomId) {
+  const key = String(roomId);
+  let roomMap = rooms.get(key);
+  if (!roomMap) {
+    roomMap = new Map();
+    rooms.set(key, roomMap);
+  }
+  const clientObj = clients.get(ws);
+  roomMap.set(ws, clientObj);
+}
+
+function removeClientFromRoom(ws, roomId) {
+  const key = String(roomId);
+  const roomMap = rooms.get(key);
+  if (!roomMap) return;
+  roomMap.delete(ws);
+  if (roomMap.size === 0) rooms.delete(key);
 }
 
 // In-memory storage for canvas elements (will persist while server runs)
@@ -110,10 +137,13 @@ wss.on("connection", (ws) => {
     if (data.type === "join") {
       // accept client's supplied name/color (optional)
       const roomId = data.roomId ?? 1;
-      const updated = { ...client, name: data.name ?? client.name, color: data.color ?? client.color, roomId };
+      const roomKey = String(roomId);
+      const updated = { ...client, name: data.name ?? client.name, color: data.color ?? client.color, roomId: roomKey };
       clients.set(ws, updated);
+      // add client to room set
+      addClientToRoom(ws, roomKey);
       // inform others in the same room about the new user
-      broadcastToRoom(ws, { type: "user:joined", id: updated.id, name: updated.name, color: updated.color }, roomId);
+      broadcastToRoom(ws, { type: "user:joined", id: updated.id, name: updated.name, color: updated.color }, roomKey);
       // send current elements to the newly joined client
       try {
         const msg = JSON.stringify({ type: "elements:init", elements });
@@ -124,7 +154,7 @@ wss.on("connection", (ws) => {
 
       // send current connected users to the newly connected client so they can seed presence list
       try {
-        const users = getUsersInRoom(ws, roomId);
+        const users = getUsersInRoom(roomKey);
         ws.send(JSON.stringify({ type: "users:init", users }));
       } catch (e) {
         console.error("Error sending users:init:", e);
@@ -132,19 +162,21 @@ wss.on("connection", (ws) => {
     }
 
     if (data.type === "room:switch") {
-      const oldRoomId = client.roomId;
-      const newRoomId = data.roomId ?? 1;
-      if (oldRoomId) {
-        broadcastToRoom(ws, { type: "user:left", id: client.id }, oldRoomId);
+      const oldRoomKey = client.roomId;
+      const newRoomKey = String(data.roomId ?? 1);
+      if (oldRoomKey) {
+        removeClientFromRoom(ws, oldRoomKey);
+        broadcastToRoom(ws, { type: "user:left", id: client.id }, oldRoomKey);
       }
-      
-      const updated = { ...client, roomId: newRoomId };
+
+      const updated = { ...client, roomId: newRoomKey };
       clients.set(ws, updated);
-      
-      broadcastToRoom(ws, { type: "user:joined", id: updated.id, name: updated.name, color: updated.color }, newRoomId);
-      
+      addClientToRoom(ws, newRoomKey);
+
+      broadcastToRoom(ws, { type: "user:joined", id: updated.id, name: updated.name, color: updated.color }, newRoomKey);
+
       try {
-        const users = getUsersInRoom(ws, newRoomId);
+        const users = getUsersInRoom(newRoomKey);
         ws.send(JSON.stringify({ type: "users:init", users }));
       } catch (e) {
         console.error("Error sending users:init after room switch:", e);
@@ -200,7 +232,8 @@ wss.on("connection", (ws) => {
 
     if (data.type === "user:leave") {
       if (client) {
-        broadcast(ws, { type: "user:left", id: client.id });
+        broadcastToRoom(ws, { type: "user:left", id: client.id }, client.roomId);
+        removeClientFromRoom(ws, client.roomId);
       }
     }
   });
@@ -208,7 +241,8 @@ wss.on("connection", (ws) => {
   ws.on("close", () => {
     const client = clients.get(ws);
     if (client && client.id) {
-      broadcast(ws, { type: "user:left", id: client.id });
+      broadcastToRoom(ws, { type: "user:left", id: client.id }, client.roomId);
+      removeClientFromRoom(ws, client.roomId);
     }
     clients.delete(ws);
   });
