@@ -51,6 +51,57 @@ export function createUser(name: string): User {
  * Storage key for volatile user data in localStorage for development/demo purposes.
  */
 const USER_STORAGE_KEY = "figma-clone-user";
+const ROOM_STORAGE_KEY = "figma-clone-room";
+
+/**
+ * Generates a random room ID (1-9999)
+ */
+function generateRandomRoomId(): number {
+  return Math.floor(Math.random() * 9999) + 1;
+}
+
+/**
+ * Retrieves or creates the current room ID from localStorage
+ * On first load, generates a new room ID
+ * @returns Current room ID
+ */
+export function getOrCreateRoomId(): number {
+  const storedRoom = localStorage.getItem(ROOM_STORAGE_KEY);
+  if (storedRoom) {
+    try {
+      return parseInt(storedRoom, 10);
+    } catch (e) {
+      console.warn("Failed to parse stored room, creating new room", e);
+    }
+  }
+
+  const newRoomId = generateRandomRoomId();
+  localStorage.setItem(ROOM_STORAGE_KEY, String(newRoomId));
+  return newRoomId;
+}
+
+/**
+ * Updates the current room ID and persists it to localStorage
+ * @param roomId - New room ID
+ */
+export function setRoomId(roomId: number): void {
+  localStorage.setItem(ROOM_STORAGE_KEY, String(roomId));
+}
+
+/**
+ * Gets the current room ID without creating one
+ */
+export function getCurrentRoomId(): number | null {
+  const stored = localStorage.getItem(ROOM_STORAGE_KEY);
+  if (stored) {
+    try {
+      return parseInt(stored, 10);
+    } catch (e) {
+      return null;
+    }
+  }
+  return null;
+}
 
 /**
  * Retrieves or creates the current user from volatile storage

@@ -11,6 +11,7 @@ import UserSettings from "@/components/User/UserSettings";
 import useUser from "@/lib/useUser";
 import { User } from "@/lib/user";
 import OnlineUsersDisplay from "@/components/User/OnlineUsersDisplay";
+import { getOrCreateRoomId, setRoomId } from "@/lib/user";
 
 export default function Home() {
 
@@ -26,6 +27,7 @@ export default function Home() {
   const [isUserSettingsOpen, setIsUserSettingsOpen] = useState(false);
   const [remoteUsers, setRemoteUsers] = useState<Record<string, User>>({});
   const { user, update } = useUser();
+  const [roomId, setRoomState] = useState<number>(getOrCreateRoomId());
 
   const isCreating = { current: false } as { current: boolean };
   const creatingShape: { current: fabric.Object | null } = { current: null };
@@ -56,7 +58,7 @@ export default function Home() {
     const onOpen = () => {
       try {
         ws.send(
-          JSON.stringify({ type: "join", name: user.name, color: user.avatarColor })
+          JSON.stringify({ type: "join", name: user.name, color: user.avatarColor, roomId })
         );
       } catch (e) { }
     };
@@ -327,7 +329,6 @@ export default function Home() {
     // Broadcast updated user info to other clients
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
       try {
-        console.log("Broadcasting user update", name, color);
         wsRef.current.send(
           JSON.stringify({ type: "user:update", name, color })
         );
@@ -337,11 +338,42 @@ export default function Home() {
     }
   }
 
+  function handleRoomChange(newRoomId: number) {
+    console.log("Switching to room", newRoomId);
+    setRoomId(newRoomId);
+    setRoomState(newRoomId);
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      try {
+        console.log("Sending room switch message to server", newRoomId);
+        wsRef.current.send(JSON.stringify({ type: "room:switch", roomId: newRoomId }));
+      } catch (e) {
+        console.error("Failed to switch room", e);
+      }
+    }
+    setRemoteUsers({});
+  }
+
 
   return (
     <main className="flex flex-col h-screen ">
       <div className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-6">
         <h1 className="text-4xl font-bold">Figma Clone</h1>
+        <div className="flex items-center gap-3">
+          <label className="text-sm font-medium text-gray-600">Room:</label>
+          <input
+            type="number"
+            min="1"
+            max="9999"
+            value={roomId}
+            onChange={(e) => {
+              const val = parseInt(e.target.value, 10);
+              if (!isNaN(val) && val > 0 && val <= 9999) {
+                handleRoomChange(val);
+              }
+            }}
+            className="w-20 px-2 py-1 border border-gray-300 rounded text-sm"
+          />
+        </div>
         <div className="flex items-center gap-6">
           <OnlineUsersDisplay remoteUsers={remoteUsers} />
           <UserDisplay user={user} onClick={() => setIsUserSettingsOpen(true)} />

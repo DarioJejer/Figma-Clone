@@ -8,6 +8,28 @@ const wss = new WebSocket.Server({ port: PORT });
 // Keep a map of clients and their latest presence
 const clients = new Map();
 
+// Helper function to broadcast only to clients in the same room
+function broadcastToRoom(sender, payload, roomId) {
+  const msg = JSON.stringify(payload);
+
+  for (const [ws, client] of clients) {
+    if (ws !== sender && client.roomId === roomId && ws.readyState === WebSocket.OPEN) {
+      ws.send(msg);
+    }
+  }
+}
+
+// Helper function to get users in a specific room
+function getUsersInRoom(sender, roomId) {
+  const users = [];
+  for (const [ws, client] of clients) {
+    if (client && client.roomId === roomId && ws !== sender && client.id) {
+      users.push({ id: client.id, name: client.name, color: client.color });
+    }
+  }
+  return users;
+}
+
 // In-memory storage for canvas elements (will persist while server runs)
 const elements = [];
 
@@ -72,7 +94,7 @@ wss.on("connection", (ws) => {
   const clientId = randomUUID();
   const name = generateRandomName();
   const color = generateRandomColor();
-  clients.set(ws, { id: clientId, name, color, presence: null });
+  clients.set(ws, { id: clientId, name, color, presence: null, roomId: null });
 
   ws.on("message", (raw) => {
     let data;
@@ -87,10 +109,11 @@ wss.on("connection", (ws) => {
 
     if (data.type === "join") {
       // accept client's supplied name/color (optional)
-      const updated = { ...client, name: data.name ?? client.name, color: data.color ?? client.color };
+      const roomId = data.roomId ?? 1;
+      const updated = { ...client, name: data.name ?? client.name, color: data.color ?? client.color, roomId };
       clients.set(ws, updated);
-      // inform others about the new user (with null presence)
-      broadcast(ws, { type: "user:joined", id: updated.id, name: updated.name, color: updated.color });
+      // inform others in the same room about the new user
+      broadcastToRoom(ws, { type: "user:joined", id: updated.id, name: updated.name, color: updated.color }, roomId);
       // send current elements to the newly joined client
       try {
         const msg = JSON.stringify({ type: "elements:init", elements });
@@ -101,15 +124,30 @@ wss.on("connection", (ws) => {
 
       // send current connected users to the newly connected client so they can seed presence list
       try {
-        const users = [];
-        clients.forEach((clientObj, otherWs) => {
-          if (otherWs !== ws && clientObj && clientObj.id) {
-            users.push({ id: clientObj.id, name: clientObj.name, color: clientObj.color });
-          }
-        });
+        const users = getUsersInRoom(ws, roomId);
         ws.send(JSON.stringify({ type: "users:init", users }));
       } catch (e) {
         console.error("Error sending users:init:", e);
+      }
+    }
+
+    if (data.type === "room:switch") {
+      const oldRoomId = client.roomId;
+      const newRoomId = data.roomId ?? 1;
+      if (oldRoomId) {
+        broadcastToRoom(ws, { type: "user:left", id: client.id }, oldRoomId);
+      }
+      
+      const updated = { ...client, roomId: newRoomId };
+      clients.set(ws, updated);
+      
+      broadcastToRoom(ws, { type: "user:joined", id: updated.id, name: updated.name, color: updated.color }, newRoomId);
+      
+      try {
+        const users = getUsersInRoom(ws, newRoomId);
+        ws.send(JSON.stringify({ type: "users:init", users }));
+      } catch (e) {
+        console.error("Error sending users:init after room switch:", e);
       }
     }
 
@@ -117,16 +155,16 @@ wss.on("connection", (ws) => {
       // presence updates can be null (hidden) or an object
       client.presence = data.cursor;
       clients.set(ws, client);
-      // broadcast presence to others
-      broadcast(ws, { type: "presence", id: client.id, cursor: data.cursor, name: client.name, color: client.color });
+      // broadcast presence to others in the same room
+      broadcastToRoom(ws, { type: "presence", id: client.id, cursor: data.cursor, name: client.name, color: client.color }, client.roomId);
     }
 
     if (data.type === "user:update") {
       // allow clients to update their profile (name / color / email)
       const updated = { ...client, name: data.name ?? client.name, color: data.color ?? client.color };
       clients.set(ws, updated);
-      // broadcast the updated profile to everyone (except sender)
-      broadcast(ws, { type: "user:updated", id: updated.id, name: updated.name, color: updated.color });
+      // broadcast the updated profile to others in the same room
+      broadcastToRoom(ws, { type: "user:updated", id: updated.id, name: updated.name, color: updated.color }, client.roomId);
     }
 
     // Store canvas element creations
