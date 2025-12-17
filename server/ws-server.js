@@ -11,6 +11,49 @@ const clients = new Map();
 // Map of roomId (string) -> Map of WebSocket -> client object
 const rooms = new Map();
 
+// Per-room canvas element storage: roomId -> array of elements
+const elementsByRoom = new Map();
+
+function getElementsForRoom(roomId) {
+  const key = String(roomId);
+  return elementsByRoom.get(key) ?? [];
+}
+
+function addElementToRoom(roomId, element) {
+  const key = String(roomId);
+  let arr = elementsByRoom.get(key);
+  if (!arr) {
+    arr = [];
+    elementsByRoom.set(key, arr);
+  }
+  arr.push(element);
+}
+
+function modifyElementInRoom(roomId, payload) {
+  const key = String(roomId);
+  const arr = elementsByRoom.get(key);
+  if (!arr) return null;
+  const index = arr.findIndex((el) => el.objectId === payload.objectId);
+  if (index === -1) return null;
+  arr[index] = { ...arr[index], ...payload };
+  return arr[index];
+}
+
+function deleteElementFromRoom(roomId, objectId) {
+  const key = String(roomId);
+  const arr = elementsByRoom.get(key);
+  if (!arr) return false;
+  const index = arr.findIndex((el) => el.objectId === objectId);
+  if (index === -1) return false;
+  arr.splice(index, 1);
+  return true;
+}
+
+function clearElementsInRoom(roomId) {
+  const key = String(roomId);
+  elementsByRoom.set(key, []);
+}
+
 // Helper function to broadcast only to clients in the same room
 function broadcastToRoom(sender, payload, roomId) {
   const msg = JSON.stringify(payload);
@@ -28,12 +71,13 @@ function broadcastToRoom(sender, payload, roomId) {
 }
 
 // Helper function to get users in a specific room
-function getUsersInRoom(roomId) {
+function getUsersInRoom(roomId, currentWs) {
   const users = [];
   const roomMap = rooms.get(String(roomId));
   if (!roomMap) return users;
-  for (const [, client] of roomMap) {
-    if (client && client.id) users.push({ id: client.id, name: client.name, color: client.color });
+  for (const [ws] of roomMap) {
+    const client = clients.get(ws);
+    if (client && client.id && ws !== currentWs) users.push({ id: client.id, name: client.name, color: client.color });
   }
   return users;
 }
@@ -146,15 +190,15 @@ wss.on("connection", (ws) => {
       broadcastToRoom(ws, { type: "user:joined", id: updated.id, name: updated.name, color: updated.color }, roomKey);
       // send current elements to the newly joined client
       try {
-        const msg = JSON.stringify({ type: "elements:init", elements });
-        ws.send(msg);
+        const roomElements = getElementsForRoom(roomKey);
+        ws.send(JSON.stringify({ type: "elements:init", elements: roomElements }));
       } catch (err) {
         console.error("Error sending elements:init:", err);
       }
 
       // send current connected users to the newly connected client so they can seed presence list
       try {
-        const users = getUsersInRoom(roomKey);
+        const users = getUsersInRoom(roomKey, ws);
         ws.send(JSON.stringify({ type: "users:init", users }));
       } catch (e) {
         console.error("Error sending users:init:", e);
@@ -176,10 +220,12 @@ wss.on("connection", (ws) => {
       broadcastToRoom(ws, { type: "user:joined", id: updated.id, name: updated.name, color: updated.color }, newRoomKey);
 
       try {
-        const users = getUsersInRoom(newRoomKey);
+        const users = getUsersInRoom(newRoomKey, ws);
         ws.send(JSON.stringify({ type: "users:init", users }));
+        const roomElements = getElementsForRoom(newRoomKey);
+        ws.send(JSON.stringify({ type: "elements:init", elements: roomElements }));
       } catch (e) {
-        console.error("Error sending users:init after room switch:", e);
+        console.error("Error sending users/init or elements:init after room switch:", e);
       }
     }
 
@@ -195,39 +241,51 @@ wss.on("connection", (ws) => {
       // allow clients to update their profile (name / color / email)
       const updated = { ...client, name: data.name ?? client.name, color: data.color ?? client.color };
       clients.set(ws, updated);
+      // also update room map entry if present so getUsersInRoom is fresh
+      try {
+        const roomKey = updated.roomId;
+        if (roomKey) {
+          const rm = rooms.get(String(roomKey));
+          if (rm) rm.set(ws, updated);
+        }
+      } catch (e) {
+        // ignore
+      }
       // broadcast the updated profile to others in the same room
       broadcastToRoom(ws, { type: "user:updated", id: updated.id, name: updated.name, color: updated.color }, client.roomId);
     }
 
-    // Store canvas element creations
+    // Store canvas element creations (room-scoped)
     if (data.type === "element:create" || data.type === "shape:create") {
       const payload = data.payload;
       if (!payload) return;
       const element = { createdAt: Date.now(), ...payload };
-      elements.push(element);
-      broadcast(ws, { type: "element:created", element });
+      const roomKey = client.roomId ?? "1";
+      addElementToRoom(roomKey, element);
+      broadcastToRoom(ws, { type: "element:created", element }, roomKey);
     }
     if (data.type === "element:modify") {
       const payload = data.payload;
-      const index = elements.findIndex((el) => el.objectId === payload.objectId);
-      if (index !== -1) {
-        elements[index] = { ...elements[index], ...payload };
-        broadcast(ws, { type: "element:modified", element: elements[index] });
+      const roomKey = client.roomId ?? "1";
+      const updated = modifyElementInRoom(roomKey, payload);
+      if (updated) {
+        broadcastToRoom(ws, { type: "element:modified", element: updated }, roomKey);
       }
     }
 
     if (data.type === "element:delete") {
       const payload = data.payload;
-      const index = elements.findIndex((el) => el.objectId === payload.objectId);
-      if (index !== -1) {
-        elements.splice(index, 1);
-        broadcast(ws, { type: "element:deleted", objectId: payload.objectId });
+      const roomKey = client.roomId ?? "1";
+      const ok = deleteElementFromRoom(roomKey, payload.objectId);
+      if (ok) {
+        broadcastToRoom(ws, { type: "element:deleted", objectId: payload.objectId }, roomKey);
       }
     }
 
     if (data.type === "element:delete_all") {
-      elements.splice(0, elements.length);
-      broadcast(ws, { type: "elements:cleared" });
+      const roomKey = client.roomId ?? "1";
+      clearElementsInRoom(roomKey);
+      broadcastToRoom(ws, { type: "elements:cleared" }, roomKey);
     }
 
     if (data.type === "user:leave") {

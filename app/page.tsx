@@ -339,12 +339,11 @@ export default function Home() {
   }
 
   function handleRoomChange(newRoomId: number) {
-    console.log("Switching to room", newRoomId);
     setRoomId(newRoomId);
     setRoomState(newRoomId);
+    canvasRef.current && (fabricCanvasRef.current!.clear(), fabricCanvasRef.current!.renderAll());
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
       try {
-        console.log("Sending room switch message to server", newRoomId);
         wsRef.current.send(JSON.stringify({ type: "room:switch", roomId: newRoomId }));
       } catch (e) {
         console.error("Failed to switch room", e);
