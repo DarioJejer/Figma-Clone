@@ -8,7 +8,9 @@ import PresenceCursors from "@/components/CursorsPresence/CursorsPresence";
 import ColorPicker from "@/components/ColorPicker/ColorPicker";
 import UserDisplay from "@/components/User/UserDisplay";
 import UserSettings from "@/components/User/UserSettings";
-import { getOrCreateUser, updateCurrentUser } from "@/lib/user";
+import useUser from "@/lib/useUser";
+import { User } from "@/lib/user";
+import OnlineUsersDisplay from "@/components/User/OnlineUsersDisplay";
 
 export default function Home() {
 
@@ -22,7 +24,8 @@ export default function Home() {
   const strokeWidthRef = useRef<number>(5);
   const [strokeWidth, setStrokeWidth] = useState<number>(5);
   const [isUserSettingsOpen, setIsUserSettingsOpen] = useState(false);
-
+  const [remoteUsers, setRemoteUsers] = useState<Record<string, User>>({});
+  const { user, update } = useUser();
 
   const isCreating = { current: false } as { current: boolean };
   const creatingShape: { current: fabric.Object | null } = { current: null };
@@ -50,14 +53,12 @@ export default function Home() {
     wsRef.current = ws;
     setWs(ws);
 
-
     const onOpen = () => {
       try {
-        const user = getOrCreateUser();
         ws.send(
-          JSON.stringify({ type: "join", name: user.name, color: user.avatarColor})
+          JSON.stringify({ type: "join", name: user.name, color: user.avatarColor })
         );
-      } catch (e) {}
+      } catch (e) { }
     };
     ws.addEventListener("open", onOpen);
 
@@ -84,6 +85,31 @@ export default function Home() {
 
           case "elements:cleared":
             elementClearedHandler(data, canvas);
+            break;
+
+          // Presence / user events
+          case "user:joined":
+            setRemoteUsers((prev) => ({ ...prev, [data.id]: { id: data.id, name: data.name, avatarColor: data.color ?? data.avatarColor } }));
+            break;
+
+          case "users:init":
+            if (Array.isArray(data.users)) {
+              const mapped: Record<string, any> = {};
+              data.users.forEach((user: any) => {
+                mapped[user.id] = { id: user.id, name: user.name, avatarColor: user.color ?? user.avatarColor };
+              });
+              setRemoteUsers((prev) => ({ ...prev, ...mapped }));
+            }
+            break;
+          case "user:updated":
+            setRemoteUsers((prev) => ({ ...prev, [data.id]: { id: data.id, name: data.name, avatarColor: data.color ?? data.avatarColor } }));
+            break;
+          case "user:left":
+            setRemoteUsers((prev) => {
+              const next = { ...prev };
+              delete next[data.id];
+              return next;
+            });
             break;
 
           default:
@@ -216,12 +242,12 @@ export default function Home() {
     });
 
     const handleKeyDown = (event: KeyboardEvent) => {
-      
-      if (event.key === "Escape") {       
-          canvas.discardActiveObject();
-          canvas.renderAll();
+
+      if (event.key === "Escape") {
+        canvas.discardActiveObject();
+        canvas.renderAll();
       }
-      
+
       if (event.key === "Delete") {
         const activeObjects = canvas.getActiveObjects();
         if (activeObjects.length > 0) {
@@ -247,7 +273,7 @@ export default function Home() {
     const cleanupWs = () => {
       const socketNow = wsRef.current;
       try {
-        socketNow?.send(JSON.stringify({ type: "leave" }));
+        socketNow?.send(JSON.stringify({ type: "user:leave" }));
       } catch (e) { }
       try {
         socketNow?.close();
@@ -297,10 +323,11 @@ export default function Home() {
 
   function handleUserChange(name: string, color: string) {
 
-    updateCurrentUser({ name, avatarColor: color });
+    update({ name, avatarColor: color });
     // Broadcast updated user info to other clients
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
       try {
+        console.log("Broadcasting user update", name, color);
         wsRef.current.send(
           JSON.stringify({ type: "user:update", name, color })
         );
@@ -315,7 +342,11 @@ export default function Home() {
     <main className="flex flex-col h-screen ">
       <div className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-6">
         <h1 className="text-4xl font-bold">Figma Clone</h1>
-        <UserDisplay onClick={() => setIsUserSettingsOpen(true)} />
+        <div className="flex items-center gap-6">
+          <OnlineUsersDisplay remoteUsers={remoteUsers} />
+          <UserDisplay user={user} onClick={() => setIsUserSettingsOpen(true)} />
+        </div>
+
       </div>
       <ShapeSelector canvasSelectedShape={selectedShape} strokeWidth={strokeWidth} onStrokeWidthChange={handleStrokeWidthChange} onReset={performReset} />
       <ColorPicker onColorSelect={handleColorSelect} />
@@ -324,6 +355,7 @@ export default function Home() {
         <PresenceCursors ws={ws} />
       </div>
       <UserSettings
+        user={user}
         isOpen={isUserSettingsOpen}
         onClose={() => setIsUserSettingsOpen(false)}
         onUserChange={handleUserChange}

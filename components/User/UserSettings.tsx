@@ -1,9 +1,11 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { getCurrentUser } from "@/lib/user";
+import useUser from "../../lib/useUser";
+import { User } from "@/lib/user";
 
 type Props = {
+  user: User;
   isOpen: boolean;
   onClose: () => void;
   onUserChange?: (name: string, color: string) => void;
@@ -20,8 +22,8 @@ const AVATAR_COLOR_PALETTE = [
   "hsl(300 75% 50%)",   // magenta
 ];
 
-export default function UserSettings({ isOpen, onClose, onUserChange }: Props) {
-  const user = getCurrentUser();
+export default function UserSettings({user, isOpen, onClose, onUserChange }: Props) {
+  
   const [name, setName] = useState("");
   const [color, setColor] = useState("");
 
@@ -30,7 +32,7 @@ export default function UserSettings({ isOpen, onClose, onUserChange }: Props) {
       setName(user.name);
       setColor(user.avatarColor);
     }
-  }, []);
+  }, [user]);
 
   const handleSave = () => {
     onUserChange?.(name, color);

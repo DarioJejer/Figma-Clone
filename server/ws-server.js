@@ -74,11 +74,6 @@ wss.on("connection", (ws) => {
   const color = generateRandomColor();
   clients.set(ws, { id: clientId, name, color, presence: null });
 
-  // send current elements to the newly connected client
-  try {
-    ws.send(JSON.stringify({ type: "init", elements }));
-  } catch (err) {}
-
   ws.on("message", (raw) => {
     let data;
     try {
@@ -97,8 +92,25 @@ wss.on("connection", (ws) => {
       // inform others about the new user (with null presence)
       broadcast(ws, { type: "user:joined", id: updated.id, name: updated.name, color: updated.color });
       // send current elements to the newly joined client
-      const msg = JSON.stringify({ type: "elements:init", elements });
-      ws.send(msg);      
+      try {
+        const msg = JSON.stringify({ type: "elements:init", elements });
+        ws.send(msg);
+      } catch (err) {
+        console.error("Error sending elements:init:", err);
+      }
+
+      // send current connected users to the newly connected client so they can seed presence list
+      try {
+        const users = [];
+        clients.forEach((clientObj, otherWs) => {
+          if (otherWs !== ws && clientObj && clientObj.id) {
+            users.push({ id: clientObj.id, name: clientObj.name, color: clientObj.color });
+          }
+        });
+        ws.send(JSON.stringify({ type: "users:init", users }));
+      } catch (e) {
+        console.error("Error sending users:init:", e);
+      }
     }
 
     if (data.type === "presence") {
@@ -109,6 +121,14 @@ wss.on("connection", (ws) => {
       broadcast(ws, { type: "presence", id: client.id, cursor: data.cursor, name: client.name, color: client.color });
     }
 
+    if (data.type === "user:update") {
+      // allow clients to update their profile (name / color / email)
+      const updated = { ...client, name: data.name ?? client.name, color: data.color ?? client.color };
+      clients.set(ws, updated);
+      // broadcast the updated profile to everyone (except sender)
+      broadcast(ws, { type: "user:updated", id: updated.id, name: updated.name, color: updated.color });
+    }
+
     // Store canvas element creations
     if (data.type === "element:create" || data.type === "shape:create") {
       const payload = data.payload;
@@ -116,7 +136,7 @@ wss.on("connection", (ws) => {
       const element = { createdAt: Date.now(), ...payload };
       elements.push(element);
       broadcast(ws, { type: "element:created", element });
-    }    
+    }
     if (data.type === "element:modify") {
       const payload = data.payload;
       const index = elements.findIndex((el) => el.objectId === payload.objectId);
@@ -140,7 +160,7 @@ wss.on("connection", (ws) => {
       broadcast(ws, { type: "elements:cleared" });
     }
 
-    if (data.type === "leave") {
+    if (data.type === "user:leave") {
       if (client) {
         broadcast(ws, { type: "user:left", id: client.id });
       }
